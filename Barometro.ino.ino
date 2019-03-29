@@ -1,5 +1,4 @@
 #include <Aerospace.h>
-#include <Wire.h>
 
 Aerospace aerospace;
 
