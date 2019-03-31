@@ -169,15 +169,15 @@ class BME
 {
   public:
     BME();
-    bool BME_begin(void);
-    bool BME_init();
+    bool begin(void);
+    bool init();
 
 
-    float BME_getTemperature(void);
-    float BME_getPressure(void);
-    float BME_getHumidity(void);
+    float getTemperature(void);
+    float getPressure(void);
+    float getHumidity(void);
         
-    float BME_getAltitude(float seaLevel);
+    float getAltitude(float seaLevel);
 
   private:
     TwoWire *_wire;
