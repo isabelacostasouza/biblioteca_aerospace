@@ -212,46 +212,76 @@ void Accelero::calibrate()
 
 //--------------------BME280--------------------//
 
-float BME::getTemperature() {
-    int32_t var1, var2, t_fine;
+void BME::setSampling(void)
+{
+    _measReg.mode     = 0b11;
+    _measReg.osrs_t   = 0b101;
+    _measReg.osrs_p   = 0b101;
+        
+    
+    _humReg.osrs_h    = 0b101;
+    _configReg.filter = 0b000;
+    _configReg.t_sb   = 0b000;
 
-    uint16_t bme280_calib.dig_T1 = read16_LE(0x88);
-    int16_t bme280_calib.dig_T2 = readS16_LE(0x8A);
-    int16_t bme280_calib.dig_T3 = readS16_LE(0x8C);
+    
+    // you must make sure to also set REGISTER_CONTROL after setting the
+    // CONTROLHUMID register, otherwise the values won't be applied (see DS 5.4.3)
+    write8(0xF2, _humReg.get());
+    write8(0xF2, _configReg.get());
+    write8(0xF4, _measReg.get());
+}
+
+void BME::readCoefficients(void)
+{
+    dig_T1 = read16_LE(0x88);
+    dig_T2 = readS16_LE(0x8A);
+    dig_T3 = readS16_LE(0x8C);
+
+    dig_P1 = read16_LE(0x8E);
+    dig_P2 = readS16_LE(0x90);
+    dig_P3 = readS16_LE(0x92);
+    dig_P4 = readS16_LE(0x94);
+    dig_P5 = readS16_LE(0x96);
+    dig_P6 = readS16_LE(0x98);
+    dig_P7 = readS16_LE(0x9A);
+    dig_P9 = readS16_LE(0x9C); 
+    dig_P9 = readS16_LE(0x9E);
+
+    dig_H1 = read8(0xA1);
+    dig_H2 = readS16_LE(0xE1);
+    dig_H3 = read8(0xE3);
+    dig_H4 = (read8(0xE4) << 4) | (read8(0xE4+1) & 0xF);
+    dig_H5 = (read8(0xE5+1) << 4) | (read8(0xE5) >> 4);
+    dig_H6 = (int8_t)read8(0xE7);
+}
+
+float BME::getTemperature(void)
+{
+    int32_t var1, var2;
 
     int32_t adc_T = read24(0xFA);
     if (adc_T == 0x800000)
         return NAN;
     adc_T >>= 4;
 
-    var1 = ((((adc_T>>3) - ((int32_t)bme280_calib.dig_T1 <<1))) *
-            ((int32_t)bme280_calib.dig_T2)) >> 11;
+    var1 = ((((adc_T>>3) - ((int32_t)dig_T1 <<1))) *
+            ((int32_t)dig_T2)) >> 11;
 
-    var2 = (((((adc_T>>4) - ((int32_t)bme280_calib.dig_T1)) *
-              ((adc_T>>4) - ((int32_t)bme280_calib.dig_T1))) >> 12) *
-            ((int32_t)bme280_calib.dig_T3)) >> 14;
+    var2 = (((((adc_T>>4) - ((int32_t)dig_T1)) *
+              ((adc_T>>4) - ((int32_t)dig_T1))) >> 12) *
+            ((int32_t)dig_T3)) >> 14;
 
-    int32_t t_fine = var1 + var2;
+    t_fine = var1 + var2;
 
     float T = (t_fine * 5 + 128) >> 8;
     return T/100;
 }
 
-float BME::getPressure() {
-    int64_t var1, var2, t_fine, p;
+float BME::getPressure(void)
+{
+    int64_t var1, var2, p;
 
-    t_fine = (int64_t)getTemperature(); // must be done first to get t_fine
-
-    uint16_t bme280_calib.dig_P1 = read16_LE(0x8E);
-    int16_t bme280_calib.dig_P2 = readS16_LE(0x90);
-    int16_t bme280_calib.dig_P3 = readS16_LE(0x92);
-    int16_t bme280_calib.dig_P4 = readS16_LE(0x94);
-    int16_t bme280_calib.dig_P5 = readS16_LE(0x96);
-    int16_t bme280_calib.dig_P6 = readS16_LE(0x98);
-    int16_t bme280_calib.dig_P7 = readS16_LE(0x9A);
-    int16_t bme280_calib.dig_P9 = readS16_LE(0x9C); 
-    int16_t bme280_calib.dig_P9 = readS16_LE(0x9E);
-
+    getTemperature(); // must be done first to get t_fine
 
     int32_t adc_P = read24(0xF7);
     if (adc_P == 0x800000) // value in case pressure measurement was disabled
@@ -259,33 +289,27 @@ float BME::getPressure() {
     adc_P >>= 4;
 
     var1 = ((int64_t)t_fine) - 128000;
-    var2 = var1 * var1 * (int64_t)bme280_calib.dig_P6;
-    var2 = var2 + ((var1*(int64_t)bme280_calib.dig_P5)<<17);
-    var2 = var2 + (((int64_t)bme280_calib.dig_P4)<<35);
-    var1 = ((var1 * var1 * (int64_t)bme280_calib.dig_P3)>>8) +
-           ((var1 * (int64_t)bme280_calib.dig_P2)<<12);
-    var1 = (((((int64_t)1)<<47)+var1))*((int64_t)bme280_calib.dig_P1)>>33;
+    var2 = var1 * var1 * (int64_t)dig_P6;
+    var2 = var2 + ((var1*(int64_t)dig_P5)<<17);
+    var2 = var2 + (((int64_t)dig_P4)<<35);
+    var1 = ((var1 * var1 * (int64_t)dig_P3)>>8) +
+           ((var1 * (int64_t)dig_P2)<<12);
+    var1 = (((((int64_t)1)<<47)+var1))*((int64_t)dig_P1)>>33;
 
     if (var1 == 0) {
         return 0; // avoid exception caused by division by zero
     }
     p = 1048576 - adc_P;
     p = (((p<<31) - var2)*3125) / var1;
-    var1 = (((int64_t)bme280_calib.dig_P9) * (p>>13) * (p>>13)) >> 25;
-    var2 = (((int64_t)bme280_calib.dig_P8) * p) >> 19;
+    var1 = (((int64_t)dig_P9) * (p>>13) * (p>>13)) >> 25;
+    var2 = (((int64_t)dig_P8) * p) >> 19;
 
-    p = ((p + var1 + var2) >> 8) + (((int64_t)bme280_calib.dig_P7)<<4);
+    p = ((p + var1 + var2) >> 8) + (((int64_t)dig_P7)<<4);
     return (float)p/256;
 }
 
-float BME::getHumidity() {
-
-    uint8_t bme280_calib.dig_H1 = read8(0xA1);
-    int16_t bme280_calib.dig_H2 = readS16_LE(0xE1);
-    uint8_t bme280_calib.dig_H3 = read8(0xE3);
-    int16_t bme280_calib.dig_H4 = (read8(0xE4) << 4) | (read8(0xE4+1) & 0xF);
-    int16_t bme280_calib.dig_H5 = (read8(0xE5+1) << 4) | (read8(0xE5) >> 4);
-    int8_t bme280_calib.dig_H6 = (int8_t)read8(0xE7);
+float BME::getHumidity(void)
+{
 
     getTemperature(); // must be done first to get t_fine
 
@@ -297,14 +321,14 @@ float BME::getHumidity() {
 
     v_x1_u32r = (t_fine - ((int32_t)76800));
 
-    v_x1_u32r = (((((adc_H << 14) - (((int32_t)bme280_calib.dig_H4) << 20) -
-                    (((int32_t)bme280_calib.dig_H5) * v_x1_u32r)) + ((int32_t)16384)) >> 15) *
-                 (((((((v_x1_u32r * ((int32_t)bme280_calib.dig_H6)) >> 10) *
-                      (((v_x1_u32r * ((int32_t)bme280_calib.dig_H3)) >> 11) + ((int32_t)32768))) >> 10) +
-                    ((int32_t)2097152)) * ((int32_t)bme280_calib.dig_H2) + 8192) >> 14));
+    v_x1_u32r = (((((adc_H << 14) - (((int32_t)dig_H4) << 20) -
+                    (((int32_t)dig_H5) * v_x1_u32r)) + ((int32_t)16384)) >> 15) *
+                 (((((((v_x1_u32r * ((int32_t)dig_H6)) >> 10) *
+                      (((v_x1_u32r * ((int32_t)dig_H3)) >> 11) + ((int32_t)32768))) >> 10) +
+                    ((int32_t)2097152)) * ((int32_t)dig_H2) + 8192) >> 14));
 
     v_x1_u32r = (v_x1_u32r - (((((v_x1_u32r >> 15) * (v_x1_u32r >> 15)) >> 7) *
-                               ((int32_t)bme280_calib.dig_H1)) >> 4));
+                               ((int32_t)dig_H1)) >> 4));
 
     v_x1_u32r = (v_x1_u32r < 0) ? 0 : v_x1_u32r;
     v_x1_u32r = (v_x1_u32r > 419430400) ? 419430400 : v_x1_u32r;
@@ -312,13 +336,15 @@ float BME::getHumidity() {
     return  h / 1024.0;
 }
 
-bool BME::begin() {
+bool BME::begin(void)
+{
     _i2caddr = 0x77;
     TwoWire * _wire = &Wire;
     return init();
 }
 
-bool BME::init() {
+bool BME::init(void)
+{
     if (_cs == -1) 
         _wire -> begin();
     else {
@@ -343,22 +369,26 @@ bool BME::init() {
     while ((rStatus & (1 << 0)) != 0)
           delay(100);
 
+    readCoefficients();
     setSampling();
     delay(100);
 
     return true;
 }
 
-uint16_t BME::read16_LE(byte reg) {
+uint16_t BME::read16_LE(byte reg)
+{
     uint16_t temp = read16(reg);
     return (temp >> 8) | (temp << 8);
 }
 
-int16_t BME::readS16_LE(byte reg) {
+int16_t BME::readS16_LE(byte reg)
+{
     return (int16_t)read16_LE(reg);
 }
 
-uint8_t BME::spixfer(uint8_t x) {
+uint8_t BME::spixfer(uint8_t x)
+{
     // hardware SPI
     if (_sck == -1)
         return SPI.transfer(x);
@@ -376,7 +406,8 @@ uint8_t BME::spixfer(uint8_t x) {
     return reply;
 }
 
-uint32_t BME::read24(byte reg) {
+uint32_t BME::read24(byte reg)
+{
     uint32_t value;
 
     if (_cs == -1) {
@@ -410,7 +441,8 @@ uint32_t BME::read24(byte reg) {
     return value;
 }
 
-uint8_t BME::read8(byte reg) {
+uint8_t BME::read8(byte reg)
+{
     uint8_t value;
     
     if (_cs == -1) {
@@ -432,7 +464,8 @@ uint8_t BME::read8(byte reg) {
     return value;
 }
 
-uint16_t BME::read16(byte reg) {
+uint16_t BME::read16(byte reg)
+{
     uint16_t value;
 
     if (_cs == -1) {
@@ -455,7 +488,8 @@ uint16_t BME::read16(byte reg) {
     return value;
 }
 
-void BME::write8(byte reg, byte value) {
+void BME::write8(byte reg, byte value)
+{
 
     if (_cs == -1) {
         _wire -> beginTransmission((uint8_t)_i2caddr);
@@ -473,7 +507,6 @@ void BME::write8(byte reg, byte value) {
         SPI.endTransaction(); // release the SPI bus
     }
 }
-
 
 //---------------------------------------------//
 

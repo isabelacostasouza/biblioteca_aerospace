@@ -39,7 +39,7 @@
 class GPS
 {
   public:
-  GPS(); 
+  GPS(void); 
     
     static const float INVALID_F_ANGLE, INVALID_F_ALTITUDE, INVALID_F_SPEED;
 
@@ -120,7 +120,7 @@ class GPS
 class Accelero
 {
   public:
-    Accelero();
+    Accelero(void);
     void begin();
     int getXAccel();
     int getYAccel();
@@ -147,7 +147,7 @@ class Accelero
 class DHT
 {
   public:
-    DHT();
+    DHT(void);
     float readTemperature(bool S=false, bool force=false);
     float readHumidity(bool force=false);
     bool read(bool force=false);
@@ -168,10 +168,11 @@ class DHT
 class BME
 {
   public:
-    BME();
+    BME(void);
     bool begin(void);
-    bool init();
+    bool init(void);
 
+    void setSampling();
 
     float getTemperature(void);
     float getPressure(void);
@@ -181,8 +182,60 @@ class BME
 
   private:
     TwoWire *_wire;
-    uint8_t spixfer(uint8_t x);
 
+    uint8_t   _i2caddr;
+    int32_t   _sensorID;
+    int32_t   t_fine;
+    int8_t _cs, _mosi, _miso, _sck;
+
+    uint16_t dig_T1;
+    int16_t  dig_T2, dig_T3;
+    ///< temperature compensation values
+
+    uint16_t dig_P1;
+    int16_t  dig_P2, dig_P3, dig_P4, dig_P5, dig_P6, dig_P7, dig_P8, dig_P9; 
+    ///< pressure compensation values
+
+
+    uint8_t  dig_H1, dig_H3;
+    int16_t  dig_H2, dig_H4, dig_H5;
+    int8_t   dig_H6; 
+    ///< humidity compensation values
+
+    struct config {
+        unsigned int t_sb : 3;
+        unsigned int filter : 3;
+        unsigned int none : 1;
+        unsigned int spi3w_en : 1;
+        unsigned int get() {
+            return (t_sb << 5) | (filter << 2) | spi3w_en;
+        }
+    };
+    config _configReg;
+
+    struct ctrl_meas {
+        unsigned int osrs_t : 3;
+        unsigned int osrs_p : 3;
+        unsigned int mode : 2;
+        unsigned int get() {
+            return (osrs_t << 5) | (osrs_p << 2) | mode;
+        }
+    };
+    ctrl_meas _measReg;
+
+    struct ctrl_hum {
+            // unused - don't set
+        unsigned int none : 5;
+         unsigned int osrs_h : 3;
+        unsigned int get() {
+            return (osrs_h);
+        }
+    };
+    ctrl_hum _humReg;
+
+
+    void readCoefficients(void);
+    uint8_t spixfer(uint8_t x);
     void write8(byte reg, byte value);
     uint8_t   read8(byte reg);
     uint16_t  read16(byte reg);
@@ -190,22 +243,16 @@ class BME
     int16_t   readS16(byte reg);
     uint16_t  read16_LE(byte reg); // little endian
     int16_t   readS16_LE(byte reg); // little endian
-    uint8_t   _i2caddr;
-    int8_t _cs, _mosi, _miso, _sck;
-
-
-
 }
 
 class DHT_InterruptLock {
   public:
-   DHT_InterruptLock() {
+   DHT_InterruptLock(void) {
     noInterrupts();
    }
-   ~DHT_InterruptLock() {
+   ~DHT_InterruptLock(void) {
     interrupts();
    }
-
 };
 
 #endif
