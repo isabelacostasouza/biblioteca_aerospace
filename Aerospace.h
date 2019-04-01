@@ -1,7 +1,6 @@
-
-
 #ifndef Aerospace_h
 #define Aerospace_h
+
 
 #if defined(ARDUINO) && ARDUINO >= 100
 #include <Arduino.h>
@@ -9,6 +8,10 @@
 #include <WProgram.h>
 #include <pins_arduino.h>
 #endif
+
+#include <Adafruit_Sensor.h>
+#include <Wire.h>
+
 
 //DHT
 #define DEBUG_PRINTER Serial
@@ -54,7 +57,7 @@ class GPS
     bool encode(char c);
     void get_position(long *latitude, long *longitude, unsigned long *fix_age = 0);
     void get_datetime(unsigned long *date, unsigned long *time, unsigned long *age = 0);
-    void gcrack_datetime(int *year, byte *month, byte *day,byte *hour, byte *minute, byte *second, byte *hundredths = 0, unsigned long *fix_age = 0);
+    void crack_datetime(int *year, byte *month, byte *day,byte *hour, byte *minute, byte *second, byte *hundredths = 0, unsigned long *fix_age = 0);
     float f_altitude();
     float f_speed_kmph();
     float f_speed_knots();
@@ -115,7 +118,7 @@ class GPS
     #endif
     int from_hex(char a);
     bool term_complete();
-}
+};
 
 class Accelero
 {
@@ -142,7 +145,7 @@ class Accelero
     int _average;
     boolean _sleep;
     boolean _sensi;
-}
+};
 
 class DHT
 {
@@ -163,7 +166,7 @@ class DHT
     uint32_t _lastreadtime, _maxcycles;
     bool _lastresult;
     uint32_t expectPulse(bool level);
-}
+};
 
 class BME
 {
@@ -243,7 +246,7 @@ class BME
     int16_t   readS16(byte reg);
     uint16_t  read16_LE(byte reg); // little endian
     int16_t   readS16_LE(byte reg); // little endian
-}
+};
 
 class DHT_InterruptLock {
   public:

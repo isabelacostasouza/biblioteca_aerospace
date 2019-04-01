@@ -1,4 +1,8 @@
 #include "Aerospace.h"
+#include "Arduino.h"
+#include <Wire.h>
+#include <SPI.h>
+
 //------------------------GPS------------------
 #define COMBINE(_sentence_type, term_number) (((unsigned)(_sentence_type) << 5) | term_number)
 #define _GPRMC_TERM   "GPRMC"
@@ -34,8 +38,9 @@ GPS::GPS()
   ,  _good_sentences(0)
   ,  _failed_checksum(0)
 #endif
-{
+{}
 
+Accelero::Accelero(){
   //Acelerometro
     _sleepPin=5;
     _selfTestPin=7;
@@ -51,6 +56,11 @@ GPS::GPS()
     _average=0;
     _sleep=false;
     _sensi=false;
+}
+
+
+DHT::DHT()
+{
     //DHT
     _pin = 9;
     _type = DHT11;
@@ -59,10 +69,12 @@ GPS::GPS()
     _port = digitalPinToPort(9);//9 É O PINO UTILIZADO
   #endif
   _maxcycles = microsecondsToClockCycles(1000);
-  //--------------------GPS---------------
-
-  _term[0] = '\0';
 }
+
+BME::BME()
+    : _cs(-1), _mosi(-1), _miso(-1), _sck(-1)
+{ }
+
 
 //ACCELERO
 
@@ -78,7 +90,7 @@ void Accelero::begin()
   digitalWrite(_sleepPin,HIGH);
   digitalWrite(_selfTestPin,LOW);
   _sleep = false;
-  accelero_setOffSets(0,0,0);
+  setOffSets(0,0,0);
   _average=10;
   _sensi = LOW;
   _refVoltage = 5;
@@ -136,9 +148,9 @@ int Accelero::getOrientation()
   int zAbs = 0;
   for(int i = 0; i<gemiddelde ; i++)              //We take in this case 10 measurements to average the error a little bit
   {
-    x = x+accelero_getXAccel();
-    y = y+accelero_getYAccel();
-    z = z+accelero_getZAccel();
+    x = x+getXAccel();
+    y = y+getYAccel();
+    z = z+getZAccel();
   }
   x= x/gemiddelde;
   y = y/gemiddelde;
@@ -175,7 +187,7 @@ int Accelero::getOrientation()
 
 void Accelero::calibrate()
 {
-  Serial.println(accelero_getOrientation());
+  Serial.println(getOrientation());
   Serial.print("\nCalibrating MMA7361011");
   double var = 5000;
   double sumX = 0;
@@ -193,16 +205,16 @@ void Accelero::calibrate()
   }
   if (_sensi == false)
   {
-    accelero_setOffSets(1672 - sumX / var,1671 - sumY / var, + 1876 - sumZ / var);
+    setOffSets(1672 - sumX / var,1671 - sumY / var, + 1876 - sumZ / var);
   }
   else
   {
-    accelero_setOffSets(1650 - sumX / var,1650 - sumY / var, + 2450 - sumZ / var);
+    setOffSets(1650 - sumX / var,1650 - sumY / var, + 2450 - sumZ / var);
   }
-  if (abs(accelero_getOrientation())!=3)
+  if (abs(getOrientation())!=3)
   {
     Serial.print("\nunable to calibrate");
-    accelero_setOffSets(0,0,0);
+    setOffSets(0,0,0);
   }
   else
   {
@@ -306,6 +318,14 @@ float BME::getPressure(void)
 
     p = ((p + var1 + var2) >> 8) + (((int64_t)dig_P7)<<4);
     return (float)p/256;
+}
+
+
+float BME::getAltitude(float seaLevel)
+{
+
+    float atmospheric = getPressure() / 100.0F;
+    return 44330.0 * (1.0 - pow(atmospheric / seaLevel, 0.1903));
 }
 
 float BME::getHumidity(void)
@@ -479,7 +499,7 @@ uint16_t BME::read16(byte reg)
             SPI.beginTransaction(SPISettings(500000, MSBFIRST, SPI_MODE0));
         digitalWrite(_cs, LOW);
         spixfer(reg | 0x80); // read, bit 7 high
-        value = (BME_spixfer(0) << 8) | spixfer(0);
+        value = (spixfer(0) << 8) | spixfer(0);
         digitalWrite(_cs, HIGH);
         if (_sck == -1)
             SPI.endTransaction(); // release the SPI bus
@@ -666,7 +686,7 @@ uint32_t DHT::expectPulse(bool level) {
 }
 
 //--------------------------GPS------------------------------------
-bool GPS_encode(char c)
+bool GPS::encode(char c)
 {
   bool valid_sentence = false;
 
@@ -712,7 +732,7 @@ bool GPS::term_complete()
 {
   if (_is_checksum_term)
   {
-    byte checksum = 16 * GPS_from_hex(_term[0]) + GPS_from_hex(_term[1]);
+    byte checksum = 16 * from_hex(_term[0]) + from_hex(_term[1]);
     if (checksum == _parity)
     {
       if(_sentence_type == _SENTENCE_GPRMC)   //set the time and date even if not tracking
