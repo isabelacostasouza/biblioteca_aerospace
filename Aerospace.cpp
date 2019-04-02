@@ -1,6 +1,10 @@
 #include "Aerospace.h"
+#include "Arduino.h"
+#include <Wire.h>
+#include <SPI.h>
+
 //------------------------GPS------------------
-#define COMBINE(sentence_type, term_number) (((unsigned)(sentence_type) << 5) | term_number)
+#define COMBINE(_sentence_type, term_number) (((unsigned)(_sentence_type) << 5) | term_number)
 #define _GPRMC_TERM   "GPRMC"
 #define _GPGGA_TERM   "GPGGA"
 #define _GPGSA_TERM   "GPGSA"
@@ -10,32 +14,33 @@
 #define _GPGSV_TERM   "GPGSV"
 #define _GLGSV_TERM   "GLGSV"
 
-Aerospace::Aerospace()
+GPS::GPS()
 //--------------GPS---------------------------------- 
-  :  _time(GPS_INVALID_TIME)
-  ,  _date(GPS_INVALID_DATE)
-  ,  _latitude(GPS_INVALID_ANGLE)
-  ,  _longitude(GPS_INVALID_ANGLE)
-  ,  _altitude(GPS_INVALID_ALTITUDE)
-  ,  _speed(GPS_INVALID_SPEED)
-  ,  _course(GPS_INVALID_ANGLE)
-  ,  _hdop(GPS_INVALID_HDOP)
-  ,  _numsats(GPS_INVALID_SATELLITES)
-  ,  _last_time_fix(GPS_INVALID_FIX_TIME)
-  ,  _last_position_fix(GPS_INVALID_FIX_TIME)
+  :  _time(INVALID_TIME)
+  ,  _date(INVALID_DATE)
+  ,  _latitude(INVALID_ANGLE)
+  ,  _longitude(INVALID_ANGLE)
+  ,  _altitude(INVALID_ALTITUDE)
+  ,  _speed(INVALID_SPEED)
+  ,  _course(INVALID_ANGLE)
+  ,  _hdop(INVALID_HDOP)
+  ,  _numsats(INVALID_SATELLITES)
+  ,  _last_time_fix(INVALID_FIX_TIME)
+  ,  _last_position_fix(INVALID_FIX_TIME)
   ,  _parity(0)
   ,  _is_checksum_term(false)
-  ,  _sentence_type(_GPS_SENTENCE_OTHER)
+  ,  _sentence_type(_SENTENCE_OTHER)
   ,  _term_number(0)
   ,  _term_offset(0)
   ,  _gps_data_good(false)
-#ifndef _GPS_NO_STATS
+#ifndef _NO_STATS
   ,  _encoded_characters(0)
   ,  _good_sentences(0)
   ,  _failed_checksum(0)
 #endif
-{
+{}
 
+Accelero::Accelero(){
   //Acelerometro
     _sleepPin=5;
     _selfTestPin=7;
@@ -51,6 +56,11 @@ Aerospace::Aerospace()
     _average=0;
     _sleep=false;
     _sensi=false;
+}
+
+
+DHT::DHT()
+{
     //DHT
     _pin = 9;
     _type = DHT11;
@@ -59,14 +69,16 @@ Aerospace::Aerospace()
     _port = digitalPinToPort(9);//9 É O PINO UTILIZADO
   #endif
   _maxcycles = microsecondsToClockCycles(1000);
-  //--------------------GPS---------------
-
-  _term[0] = '\0';
 }
+
+BME::BME()
+    : _cs(-1), _mosi(-1), _miso(-1), _sck(-1)
+{ }
+
 
 //ACCELERO
 
-void Aerospace::accelero_begin()
+void Accelero::begin()
 {
   pinMode(_sleepPin, OUTPUT);
   pinMode(_selfTestPin, OUTPUT);
@@ -78,7 +90,7 @@ void Aerospace::accelero_begin()
   digitalWrite(_sleepPin,HIGH);
   digitalWrite(_selfTestPin,LOW);
   _sleep = false;
-  accelero_setOffSets(0,0,0);
+  setOffSets(0,0,0);
   _average=10;
   _sensi = LOW;
   _refVoltage = 5;
@@ -87,7 +99,7 @@ void Aerospace::accelero_begin()
 }
 
 
-void Aerospace::accelero_setOffSets(int xOffSet, int yOffSet, int zOffSet)
+void Accelero::setOffSets(int xOffSet, int yOffSet, int zOffSet)
 {  
     _offSets[0]= map(xOffSet,0,3300,0,1024);
     _offSets[1]= map(yOffSet,0,3300,0,1024);
@@ -95,7 +107,7 @@ void Aerospace::accelero_setOffSets(int xOffSet, int yOffSet, int zOffSet)
 
 }
 
-int Aerospace::accelero_getXAccel()
+int Accelero::getXAccel()
 {
   int sum = 0;
   for (int i = 0;i<_average;i++)
@@ -105,7 +117,7 @@ int Aerospace::accelero_getXAccel()
   return sum/_average;
 }
 
-int Aerospace::accelero_getYAccel()
+int Accelero::getYAccel()
 {
   int sum = 0;
   for (int i = 0;i<_average;i++)
@@ -115,7 +127,7 @@ int Aerospace::accelero_getYAccel()
   return sum/_average;
 }
 
-int Aerospace::accelero_getZAccel()
+int Accelero::getZAccel()
 {
   int sum = 0;
   for (int i = 0;i<_average;i++)
@@ -125,7 +137,7 @@ int Aerospace::accelero_getZAccel()
   return sum/_average;
 }
 
-int Aerospace::accelero_getOrientation()
+int Accelero::getOrientation()
 {
   int gemiddelde = 10;
   int x = 0;
@@ -136,9 +148,9 @@ int Aerospace::accelero_getOrientation()
   int zAbs = 0;
   for(int i = 0; i<gemiddelde ; i++)              //We take in this case 10 measurements to average the error a little bit
   {
-    x = x+accelero_getXAccel();
-    y = y+accelero_getYAccel();
-    z = z+accelero_getZAccel();
+    x = x+getXAccel();
+    y = y+getYAccel();
+    z = z+getZAccel();
   }
   x= x/gemiddelde;
   y = y/gemiddelde;
@@ -173,9 +185,9 @@ int Aerospace::accelero_getOrientation()
   return 0;
 }
 
-void Aerospace::accelero_calibrate()
+void Accelero::calibrate()
 {
-  Serial.println(accelero_getOrientation());
+  Serial.println(getOrientation());
   Serial.print("\nCalibrating MMA7361011");
   double var = 5000;
   double sumX = 0;
@@ -193,16 +205,16 @@ void Aerospace::accelero_calibrate()
   }
   if (_sensi == false)
   {
-    accelero_setOffSets(1672 - sumX / var,1671 - sumY / var, + 1876 - sumZ / var);
+    setOffSets(1672 - sumX / var,1671 - sumY / var, + 1876 - sumZ / var);
   }
   else
   {
-    accelero_setOffSets(1650 - sumX / var,1650 - sumY / var, + 2450 - sumZ / var);
+    setOffSets(1650 - sumX / var,1650 - sumY / var, + 2450 - sumZ / var);
   }
-  if (abs(accelero_getOrientation())!=3)
+  if (abs(getOrientation())!=3)
   {
     Serial.print("\nunable to calibrate");
-    accelero_setOffSets(0,0,0);
+    setOffSets(0,0,0);
   }
   else
   {
@@ -212,14 +224,54 @@ void Aerospace::accelero_calibrate()
 
 //--------------------BME280--------------------//
 
-float Aerospace::BME_getTemperature() {
+void BME::setSampling(void)
+{
+    _measReg.mode     = 0b11;
+    _measReg.osrs_t   = 0b101;
+    _measReg.osrs_p   = 0b101;
+        
+    
+    _humReg.osrs_h    = 0b101;
+    _configReg.filter = 0b000;
+    _configReg.t_sb   = 0b000;
+
+    
+    // you must make sure to also set REGISTER_CONTROL after setting the
+    // CONTROLHUMID register, otherwise the values won't be applied (see DS 5.4.3)
+    write8(0xF2, _humReg.get());
+    write8(0xF2, _configReg.get());
+    write8(0xF4, _measReg.get());
+}
+
+void BME::readCoefficients(void)
+{
+    dig_T1 = read16_LE(0x88);
+    dig_T2 = readS16_LE(0x8A);
+    dig_T3 = readS16_LE(0x8C);
+
+    dig_P1 = read16_LE(0x8E);
+    dig_P2 = readS16_LE(0x90);
+    dig_P3 = readS16_LE(0x92);
+    dig_P4 = readS16_LE(0x94);
+    dig_P5 = readS16_LE(0x96);
+    dig_P6 = readS16_LE(0x98);
+    dig_P7 = readS16_LE(0x9A);
+    dig_P9 = readS16_LE(0x9C); 
+    dig_P9 = readS16_LE(0x9E);
+
+    dig_H1 = read8(0xA1);
+    dig_H2 = readS16_LE(0xE1);
+    dig_H3 = read8(0xE3);
+    dig_H4 = (read8(0xE4) << 4) | (read8(0xE4+1) & 0xF);
+    dig_H5 = (read8(0xE5+1) << 4) | (read8(0xE5) >> 4);
+    dig_H6 = (int8_t)read8(0xE7);
+}
+
+float BME::getTemperature(void)
+{
     int32_t var1, var2;
 
-    uint16_t dig_T1 = BME_read16_LE(0x88);
-    int16_t dig_T2 = BME_readS16_LE(0x8A);
-    int16_t dig_T3 = BME_readS16_LE(0x8C);
-
-    int32_t adc_T = BME_read24(0xFA);
+    int32_t adc_T = read24(0xFA);
     if (adc_T == 0x800000)
         return NAN;
     adc_T >>= 4;
@@ -231,29 +283,19 @@ float Aerospace::BME_getTemperature() {
               ((adc_T>>4) - ((int32_t)dig_T1))) >> 12) *
             ((int32_t)dig_T3)) >> 14;
 
-    int32_t t_fine = var1 + var2;
+    t_fine = var1 + var2;
 
     float T = (t_fine * 5 + 128) >> 8;
     return T/100;
 }
 
-float Aerospace::BME_getPressure() {
-    int64_t var1, var2, t_fine, p;
+float BME::getPressure(void)
+{
+    int64_t var1, var2, p;
 
-    t_fine = (int64_t)BME_getTemperature(); // must be done first to get t_fine
+    getTemperature(); // must be done first to get t_fine
 
-    uint16_t dig_P1 = BME_read16_LE(0x8E);
-    int16_t dig_P2 = BME_readS16_LE(0x90);
-    int16_t dig_P3 = BME_readS16_LE(0x92);
-    int16_t dig_P4 = BME_readS16_LE(0x94);
-    int16_t dig_P5 = BME_readS16_LE(0x96);
-    int16_t dig_P6 = BME_readS16_LE(0x98);
-    int16_t dig_P7 = BME_readS16_LE(0x9A);
-    int16_t dig_P9 = BME_readS16_LE(0x9C); 
-    int16_t dig_P9 = BME_readS16_LE(0x9E);
-
-
-    int32_t adc_P = BME_read24(0xF7);
+    int32_t adc_P = read24(0xF7);
     if (adc_P == 0x800000) // value in case pressure measurement was disabled
         return NAN;
     adc_P >>= 4;
@@ -278,18 +320,20 @@ float Aerospace::BME_getPressure() {
     return (float)p/256;
 }
 
-float Aerospace::BME_getHumidity() {
 
-    uint8_t dig_H1 = BME_read8(0xA1);
-    int16_t dig_H2 = BME_readS16_LE(0xE1);
-    uint8_t dig_H3 = BME_read8(0xE3);
-    int16_t dig_H4 = (BME_read8(0xE4) << 4) | (BME_read8(0xE4+1) & 0xF);
-    int16_t dig_H5 = (BME_read8(0xE5+1) << 4) | (BME_read8(0xE5) >> 4);
-    int8_t dig_H6 = (int8_t)BME_read8(0xE7);
+float BME::getAltitude(float seaLevel)
+{
 
-    BME_getTemperature(); // must be done first to get t_fine
+    float atmospheric = getPressure() / 100.0F;
+    return 44330.0 * (1.0 - pow(atmospheric / seaLevel, 0.1903));
+}
 
-    int32_t adc_H = BME_read16(0xFD);
+float BME::getHumidity(void)
+{
+
+    getTemperature(); // must be done first to get t_fine
+
+    int32_t adc_H = read16(0xFD);
     if (adc_H == 0x8000) // value in case humidity measurement was disabled
         return NAN;
 
@@ -312,34 +356,17 @@ float Aerospace::BME_getHumidity() {
     return  h / 1024.0;
 }
 
-bool Aerospace::BME_begin() {
+bool BME::begin(void)
+{
     _i2caddr = 0x77;
     TwoWire * _wire = &Wire;
     return init();
 }
 
-void Aerospace::BME_setSampling() {
-
-    _measReg.mode     = 0b11;
-    _measReg.osrs_t   = 0b101;
-    _measReg.osrs_p   = 0b101;
-        
-    
-    _humReg.osrs_h    = 0b101;
-    _configReg.filter = 0b000;
-    _configReg.t_sb   = 0b000;
-
-    
-    // you must make sure to also set REGISTER_CONTROL after setting the
-    // CONTROLHUMID register, otherwise the values won't be applied (see DS 5.4.3)
-    write8(0xF2, _humReg.get());
-    write8(0xF2, _configReg.get());
-    write8(0xF4, _measReg.get());
-}
-
-bool Aerospace::BME_init() {
+bool BME::init(void)
+{
     if (_cs == -1) 
-        _wire -> BME_begin();
+        _wire -> begin();
     else {
         digitalWrite(_cs, HIGH);
         pinMode(_cs, OUTPUT);
@@ -352,32 +379,36 @@ bool Aerospace::BME_init() {
         }
     }
 
-    if (BME_read8(0xD0) != 0x60)
+    if (read8(0xD0) != 0x60)
         return false;
 
-    BME_write8(0xE0, 0xB6);
+    write8(0xE0, 0xB6);
     delay(300);
 
-    uint8_t const rStatus = BME_read8(0XF3);
+    uint8_t const rStatus = read8(0XF3);
     while ((rStatus & (1 << 0)) != 0)
           delay(100);
 
-    BME_setSampling();
+    readCoefficients();
+    setSampling();
     delay(100);
 
     return true;
 }
 
-uint16_t Aerospace::BME_read16_LE(byte reg) {
-    uint16_t temp = BME_read16(reg);
+uint16_t BME::read16_LE(byte reg)
+{
+    uint16_t temp = read16(reg);
     return (temp >> 8) | (temp << 8);
 }
 
-int16_t Aerospace::BME_readS16_LE(byte reg) {
-    return (int16_t)BME_read16_LE(reg);
+int16_t BME::readS16_LE(byte reg)
+{
+    return (int16_t)read16_LE(reg);
 }
 
-uint8_t Aerospace::BME_spixfer(uint8_t x) {
+uint8_t BME::spixfer(uint8_t x)
+{
     // hardware SPI
     if (_sck == -1)
         return SPI.transfer(x);
@@ -395,7 +426,8 @@ uint8_t Aerospace::BME_spixfer(uint8_t x) {
     return reply;
 }
 
-uint32_t Aerospace::BME_read24(byte reg) {
+uint32_t BME::read24(byte reg)
+{
     uint32_t value;
 
     if (_cs == -1) {
@@ -413,13 +445,13 @@ uint32_t Aerospace::BME_read24(byte reg) {
         if (_sck == -1)
             SPI.beginTransaction(SPISettings(500000, MSBFIRST, SPI_MODE0));
         digitalWrite(_cs, LOW);
-        BME_spixfer(reg | 0x80); // read, bit 7 high
+        spixfer(reg | 0x80); // read, bit 7 high
 
-        value = BME_spixfer(0);
+        value = spixfer(0);
         value <<= 8;
-        value |= BME_spixfer(0);
+        value |= spixfer(0);
         value <<= 8;
-        value |= BME_spixfer(0);
+        value |= spixfer(0);
 
         digitalWrite(_cs, HIGH);
         if (_sck == -1)
@@ -429,7 +461,8 @@ uint32_t Aerospace::BME_read24(byte reg) {
     return value;
 }
 
-uint8_t Aerospace::BME_read8(byte reg) {
+uint8_t BME::read8(byte reg)
+{
     uint8_t value;
     
     if (_cs == -1) {
@@ -442,8 +475,8 @@ uint8_t Aerospace::BME_read8(byte reg) {
         if (_sck == -1)
             SPI.beginTransaction(SPISettings(500000, MSBFIRST, SPI_MODE0));
         digitalWrite(_cs, LOW);
-        BME_spixfer(reg | 0x80); // read, bit 7 high
-        value = BME_spixfer(0);
+        spixfer(reg | 0x80); // read, bit 7 high
+        value = spixfer(0);
         digitalWrite(_cs, HIGH);
         if (_sck == -1)
             SPI.endTransaction(); // release the SPI bus
@@ -451,7 +484,8 @@ uint8_t Aerospace::BME_read8(byte reg) {
     return value;
 }
 
-uint16_t Aerospace::BME_read16(byte reg) {
+uint16_t BME::read16(byte reg)
+{
     uint16_t value;
 
     if (_cs == -1) {
@@ -464,8 +498,8 @@ uint16_t Aerospace::BME_read16(byte reg) {
         if (_sck == -1)
             SPI.beginTransaction(SPISettings(500000, MSBFIRST, SPI_MODE0));
         digitalWrite(_cs, LOW);
-        BME_spixfer(reg | 0x80); // read, bit 7 high
-        value = (BME_spixfer(0) << 8) | BME_spixfer(0);
+        spixfer(reg | 0x80); // read, bit 7 high
+        value = (spixfer(0) << 8) | spixfer(0);
         digitalWrite(_cs, HIGH);
         if (_sck == -1)
             SPI.endTransaction(); // release the SPI bus
@@ -474,7 +508,8 @@ uint16_t Aerospace::BME_read16(byte reg) {
     return value;
 }
 
-void Aerospace::BME_write8(byte reg, byte value) {
+void BME::write8(byte reg, byte value)
+{
 
     if (_cs == -1) {
         _wire -> beginTransmission((uint8_t)_i2caddr);
@@ -485,52 +520,40 @@ void Aerospace::BME_write8(byte reg, byte value) {
         if (_sck == -1)
             SPI.beginTransaction(SPISettings(500000, MSBFIRST, SPI_MODE0));
         digitalWrite(_cs, LOW);
-        BME_spixfer(reg & ~0x80); // write, bit 7 low
-        BME_spixfer(value);
+        spixfer(reg & ~0x80); // write, bit 7 low
+        spixfer(value);
         digitalWrite(_cs, HIGH);
     if (_sck == -1)
         SPI.endTransaction(); // release the SPI bus
     }
 }
 
-
 //---------------------------------------------//
-
-
-
-
 
   //DHT : AINDA EM ANDAMENTO
   //VERIFICAR: funcao read(),cases dht e define .h,define debug_println .h,construtor do dht e .cpp da library 
 
-
-
-
-
-//Aerospace::dht_readTemperature
-float Aerospace::DHT_readTemperature(bool S, bool force) {
+float DHT::readTemperature(bool S, bool force) {
   float f = NAN;
 
-  if (DHT_read(force)) {
+  if (read(force)) {
       f = data[2];
   }
   return f;
 }
 
-
 //Aerospace::dht_readHumidity
-float Aerospace::DHT_readHumidity(bool force) {
+float DHT::readHumidity(bool force) {
   float f = NAN;
-  if (DHT_read()) {
+  if (read()) {
       f = data[0];
     }
   
   return f;
 }
 
-
 //Aerospace::dht_read
-bool Aerospace::DHT_read(bool force) { 
+bool DHT::read(bool force) { 
   // Check if sensor was read less than two seconds ago and return early
   // to use last reading.
   uint32_t currenttime = millis();
@@ -571,12 +594,12 @@ bool Aerospace::DHT_read(bool force) {
 
     // First expect a low signal for ~80 microseconds followed by a high signal
     // for ~80 microseconds again.
-    if (DHT_expectPulse(LOW) == 0) {
+    if (expectPulse(LOW) == 0) {
       DEBUG_PRINTLN(F("Timeout waiting for start signal low pulse."));
       _lastresult = false;
       return _lastresult;
     }
-    if (DHT_expectPulse(HIGH) == 0) {
+    if (expectPulse(HIGH) == 0) {
       DEBUG_PRINTLN(F("Timeout waiting for start signal high pulse."));
       _lastresult = false;
       return _lastresult;
@@ -591,8 +614,8 @@ bool Aerospace::DHT_read(bool force) {
     // 1 (high state cycle count > low state cycle count). Note that for speed all
     // the pulses are read into a array and then examined in a later step.
     for (int i=0; i<80; i+=2) {
-      cycles[i]   = DHT_expectPulse(LOW);
-      cycles[i+1] = DHT_expectPulse(HIGH);
+      cycles[i]   = expectPulse(LOW);
+      cycles[i+1] = expectPulse(HIGH);
     }
   } // Timing critical code is now complete.
 
@@ -637,9 +660,8 @@ bool Aerospace::DHT_read(bool force) {
   }
 }
 
-
 //Aerospace::dht_expectPulse
-uint32_t Aerospace::DHT_expectPulse(bool level) {
+uint32_t DHT::expectPulse(bool level) {
   uint32_t count = 0;
   // On AVR platforms use direct GPIO port access as it's much faster and better
   // for catching pulses that are 10's of microseconds in length:
@@ -664,13 +686,13 @@ uint32_t Aerospace::DHT_expectPulse(bool level) {
 }
 
 //--------------------------GPS------------------------------------
-bool Aerospace::GPS_encode(char c)
+bool GPS::encode(char c)
 {
   bool valid_sentence = false;
 
-#ifndef _GPS_NO_STATS
+  #ifndef _NO_STATS
   ++_encoded_characters;
-#endif
+  #endif
   switch(c)
   {
   case ',': // term terminators
@@ -681,7 +703,7 @@ bool Aerospace::GPS_encode(char c)
     if (_term_offset < sizeof(_term))
     {
       _term[_term_offset] = 0;
-      valid_sentence = GPS_term_complete();
+      valid_sentence = term_complete();
     }
     ++_term_number;
     _term_offset = 0;
@@ -691,7 +713,7 @@ bool Aerospace::GPS_encode(char c)
   case '$': // sentence begin
     _term_number = _term_offset = 0;
     _parity = 0;
-    _sentence_type = _GPS_SENTENCE_OTHER;
+    _sentence_type = _SENTENCE_OTHER;
     _is_checksum_term = false;
     _gps_data_good = false;
     return valid_sentence;
@@ -705,29 +727,30 @@ bool Aerospace::GPS_encode(char c)
 
   return valid_sentence;
 }
-bool Aerospace::GPS_term_complete()
+
+bool GPS::term_complete()
 {
   if (_is_checksum_term)
   {
-    byte checksum = 16 * GPS_from_hex(_term[0]) + GPS_from_hex(_term[1]);
+    byte checksum = 16 * from_hex(_term[0]) + from_hex(_term[1]);
     if (checksum == _parity)
     {
-      if(_sentence_type == _GPS_SENTENCE_GPRMC)   //set the time and date even if not tracking
+      if(_sentence_type == _SENTENCE_GPRMC)   //set the time and date even if not tracking
       {
           _time      = _new_time;
           _date      = _new_date;
       }
       if (_gps_data_good)
       {
-#ifndef _GPS_NO_STATS
+        #ifndef _NO_STATS
         ++_good_sentences;
-#endif
+        #endif
         _last_time_fix = _new_time_fix;
         _last_position_fix = _new_position_fix;
 
         switch(_sentence_type)
         {
-        case _GPS_SENTENCE_GPRMC:
+        case _SENTENCE_GPRMC:
           _time      = _new_time;
           _date      = _new_date;
           _latitude  = _new_latitude;
@@ -735,7 +758,7 @@ bool Aerospace::GPS_term_complete()
           _speed     = _new_speed;
           _course    = _new_course;
           break;
-        case _GPS_SENTENCE_GPGGA:
+        case _SENTENCE_GPGGA:
           _altitude  = _new_altitude;
           _time      = _new_time;
           _latitude  = _new_latitude;
@@ -749,103 +772,103 @@ bool Aerospace::GPS_term_complete()
       }
     }
 
-#ifndef _GPS_NO_STATS
+    #ifndef _NO_STATS
     else
       ++_failed_checksum;
-#endif
+    #endif
     return false;
   }
 
   // the first term determines the sentence type
   if (_term_number == 0)
   {
-    if (!GPS_gpsstrcmp(_term, _GPRMC_TERM) || !GPS_gpsstrcmp(_term, _GNRMC_TERM))
-      _sentence_type = _GPS_SENTENCE_GPRMC;
-    else if (!GPS_gpsstrcmp(_term, _GPGGA_TERM))
-      _sentence_type = _GPS_SENTENCE_GPGGA;
-    else if (!GPS_gpsstrcmp(_term, _GNGNS_TERM))
-      _sentence_type = _GPS_SENTENCE_GNGNS;
-    else if (!GPS_gpsstrcmp(_term, _GNGSA_TERM) || !GPS_gpsstrcmp(_term, _GPGSA_TERM))
-      _sentence_type = _GPS_SENTENCE_GNGSA;
-    else if (!GPS_gpsstrcmp(_term, _GPGSV_TERM))
-      _sentence_type = _GPS_SENTENCE_GPGSV;
-    else if (!GPS_gpsstrcmp(_term, _GLGSV_TERM))
-      _sentence_type = _GPS_SENTENCE_GLGSV;
+    if (!gpsstrcmp(_term, _GPRMC_TERM) || !gpsstrcmp(_term, _GNRMC_TERM))
+      _sentence_type = _SENTENCE_GPRMC;
+    else if (!gpsstrcmp(_term, _GPGGA_TERM))
+      _sentence_type = _SENTENCE_GPGGA;
+    else if (!gpsstrcmp(_term, _GNGNS_TERM))
+      _sentence_type = _SENTENCE_GNGNS;
+    else if (!gpsstrcmp(_term, _GNGSA_TERM) || !gpsstrcmp(_term, _GPGSA_TERM))
+      _sentence_type = _SENTENCE_GNGSA;
+    else if (!gpsstrcmp(_term, _GPGSV_TERM))
+      _sentence_type = _SENTENCE_GPGSV;
+    else if (!gpsstrcmp(_term, _GLGSV_TERM))
+      _sentence_type = _SENTENCE_GLGSV;
     else
-      _sentence_type = _GPS_SENTENCE_OTHER;
+      _sentence_type = _SENTENCE_OTHER;
     return false;
   }
 
-  if (_sentence_type != _GPS_SENTENCE_OTHER && _term[0])
+  if (_sentence_type != _SENTENCE_OTHER && _term[0])
     switch(COMBINE(_sentence_type, _term_number))
   {
-    case COMBINE(_GPS_SENTENCE_GPRMC, 1): // Time in both sentences
-    case COMBINE(_GPS_SENTENCE_GPGGA, 1):
-    case COMBINE(_GPS_SENTENCE_GNGNS, 1):
-      _new_time = GPS_parse_decimal();
+    case COMBINE(_SENTENCE_GPRMC, 1): // Time in both sentences
+    case COMBINE(_SENTENCE_GPGGA, 1):
+    case COMBINE(_SENTENCE_GNGNS, 1):
+      _new_time = parse_decimal();
       _new_time_fix = millis();
       break;
-    case COMBINE(_GPS_SENTENCE_GPRMC, 2): // GPRMC validity
+    case COMBINE(_SENTENCE_GPRMC, 2): // GPRMC validity
       _gps_data_good = _term[0] == 'A';
       break;
-    case COMBINE(_GPS_SENTENCE_GPRMC, 3): // Latitude
-    case COMBINE(_GPS_SENTENCE_GPGGA, 2):
-    case COMBINE(_GPS_SENTENCE_GNGNS, 2):
-      _new_latitude = GPS_parse_degrees();
+    case COMBINE(_SENTENCE_GPRMC, 3): // Latitude
+    case COMBINE(_SENTENCE_GPGGA, 2):
+    case COMBINE(_SENTENCE_GNGNS, 2):
+      _new_latitude = parse_degrees();
       _new_position_fix = millis();
       break;
-    case COMBINE(_GPS_SENTENCE_GPRMC, 4): // N/S
-    case COMBINE(_GPS_SENTENCE_GPGGA, 3):
-    case COMBINE(_GPS_SENTENCE_GNGNS, 3):
+    case COMBINE(_SENTENCE_GPRMC, 4): // N/S
+    case COMBINE(_SENTENCE_GPGGA, 3):
+    case COMBINE(_SENTENCE_GNGNS, 3):
       if (_term[0] == 'S')
         _new_latitude = -_new_latitude;
       break;
-    case COMBINE(_GPS_SENTENCE_GPRMC, 5): // Longitude
-    case COMBINE(_GPS_SENTENCE_GPGGA, 4):
-    case COMBINE(_GPS_SENTENCE_GNGNS, 4):
-      _new_longitude = GPS_parse_degrees();
+    case COMBINE(_SENTENCE_GPRMC, 5): // Longitude
+    case COMBINE(_SENTENCE_GPGGA, 4):
+    case COMBINE(_SENTENCE_GNGNS, 4):
+      _new_longitude = parse_degrees();
       break;
-    case COMBINE(_GPS_SENTENCE_GPRMC, 6): // E/W
-    case COMBINE(_GPS_SENTENCE_GPGGA, 5):
-    case COMBINE(_GPS_SENTENCE_GNGNS, 5):
+    case COMBINE(_SENTENCE_GPRMC, 6): // E/W
+    case COMBINE(_SENTENCE_GPGGA, 5):
+    case COMBINE(_SENTENCE_GNGNS, 5):
       if (_term[0] == 'W')
         _new_longitude = -_new_longitude;
       break;
-    case COMBINE(_GPS_SENTENCE_GNGNS, 6):
+    case COMBINE(_SENTENCE_GNGNS, 6):
       strncpy(_constellations, _term, 5);
       break;
-    case COMBINE(_GPS_SENTENCE_GPRMC, 7): // Speed (GPRMC)
-      _new_speed = GPS_parse_decimal();
+    case COMBINE(_SENTENCE_GPRMC, 7): // Speed (GPRMC)
+      _new_speed = parse_decimal();
       break;
-    case COMBINE(_GPS_SENTENCE_GPRMC, 8): // Course (GPRMC)
-      _new_course = GPS_parse_decimal();
+    case COMBINE(_SENTENCE_GPRMC, 8): // Course (GPRMC)
+      _new_course = parse_decimal();
       break;
-    case COMBINE(_GPS_SENTENCE_GPRMC, 9): // Date (GPRMC)
-      _new_date = GPS_gpsatol(_term);
+    case COMBINE(_SENTENCE_GPRMC, 9): // Date (GPRMC)
+      _new_date = gpsatol(_term);
       break;
-    case COMBINE(_GPS_SENTENCE_GPGGA, 6): // Fix data (GPGGA)
+    case COMBINE(_SENTENCE_GPGGA, 6): // Fix data (GPGGA)
       _gps_data_good = _term[0] > '0';
       break;
-    case COMBINE(_GPS_SENTENCE_GPGGA, 7): // Satellites used (GPGGA): GPS only
-    case COMBINE(_GPS_SENTENCE_GNGNS, 7): //  GNGNS counts-in all constellations
+    case COMBINE(_SENTENCE_GPGGA, 7): // Satellites used (GPGGA): GPS only
+    case COMBINE(_SENTENCE_GNGNS, 7): //  GNGNS counts-in all constellations
       _new_numsats = (unsigned char)atoi(_term);
       break;
-    case COMBINE(_GPS_SENTENCE_GPGGA, 8): // HDOP
-      _new_hdop = GPS_parse_decimal();
+    case COMBINE(_SENTENCE_GPGGA, 8): // HDOP
+      _new_hdop = parse_decimal();
       break;
-    case COMBINE(_GPS_SENTENCE_GPGGA, 9): // Altitude (GPGGA)
-      _new_altitude = GPS_parse_decimal();
+    case COMBINE(_SENTENCE_GPGGA, 9): // Altitude (GPGGA)
+      _new_altitude = parse_decimal();
       break;
-    case COMBINE(_GPS_SENTENCE_GNGSA, 3): //satellites used in solution: 3 to 15
+    case COMBINE(_SENTENCE_GNGSA, 3): //satellites used in solution: 3 to 15
       //_sats_used[
       break;
-    case COMBINE(_GPS_SENTENCE_GPGSV, 2):   //beginning of sequence
-    case COMBINE(_GPS_SENTENCE_GLGSV, 2):   //beginning of sequence
+    case COMBINE(_SENTENCE_GPGSV, 2):   //beginning of sequence
+    case COMBINE(_SENTENCE_GLGSV, 2):   //beginning of sequence
     {
       uint8_t msgId = atoi(_term)-1;  //start from 0
       if(msgId == 0) {
         //http://geostar-navigation.com/file/geos3/geos_nmea_protocol_v3_0_eng.pdf
-        if(_sentence_type == _GPS_SENTENCE_GPGSV) {
+        if(_sentence_type == _SENTENCE_GPGSV) {
           //reset GPS & WAAS trackedSatellites
           for(uint8_t x=0;x<12;x++)
           {
@@ -860,30 +883,30 @@ bool Aerospace::GPS_term_complete()
         }
       }
       _sat_index = msgId*4;   //4 sattelites/line
-      if(_sentence_type == _GPS_SENTENCE_GLGSV)
+      if(_sentence_type == _SENTENCE_GLGSV)
       {
         _sat_index = msgId*4 + 12;   //Glonass offset by 12
       }
       break;
   }
-    case COMBINE(_GPS_SENTENCE_GPGSV, 4):   //satellite #
-    case COMBINE(_GPS_SENTENCE_GPGSV, 8):
-    case COMBINE(_GPS_SENTENCE_GPGSV, 12):
-    case COMBINE(_GPS_SENTENCE_GPGSV, 16):
-    case COMBINE(_GPS_SENTENCE_GLGSV, 4):
-    case COMBINE(_GPS_SENTENCE_GLGSV, 8):
-    case COMBINE(_GPS_SENTENCE_GLGSV, 12):
-    case COMBINE(_GPS_SENTENCE_GLGSV, 16):
+    case COMBINE(_SENTENCE_GPGSV, 4):   //satellite #
+    case COMBINE(_SENTENCE_GPGSV, 8):
+    case COMBINE(_SENTENCE_GPGSV, 12):
+    case COMBINE(_SENTENCE_GPGSV, 16):
+    case COMBINE(_SENTENCE_GLGSV, 4):
+    case COMBINE(_SENTENCE_GLGSV, 8):
+    case COMBINE(_SENTENCE_GLGSV, 12):
+    case COMBINE(_SENTENCE_GLGSV, 16):
       _tracked_satellites_index = atoi(_term);
       break;
-    case COMBINE(_GPS_SENTENCE_GPGSV, 7):   //strength
-    case COMBINE(_GPS_SENTENCE_GPGSV, 11):
-    case COMBINE(_GPS_SENTENCE_GPGSV, 15):
-    case COMBINE(_GPS_SENTENCE_GPGSV, 19):
-    case COMBINE(_GPS_SENTENCE_GLGSV, 7):   //strength
-    case COMBINE(_GPS_SENTENCE_GLGSV, 11):
-    case COMBINE(_GPS_SENTENCE_GLGSV, 15):
-    case COMBINE(_GPS_SENTENCE_GLGSV, 19):
+    case COMBINE(_SENTENCE_GPGSV, 7):   //strength
+    case COMBINE(_SENTENCE_GPGSV, 11):
+    case COMBINE(_SENTENCE_GPGSV, 15):
+    case COMBINE(_SENTENCE_GPGSV, 19):
+    case COMBINE(_SENTENCE_GLGSV, 7):   //strength
+    case COMBINE(_SENTENCE_GLGSV, 11):
+    case COMBINE(_SENTENCE_GLGSV, 15):
+    case COMBINE(_SENTENCE_GLGSV, 19):
       uint8_t stren = (uint8_t)atoi(_term);
       if(stren == 0)  //remove the record, 0dB strength
       {
@@ -898,39 +921,45 @@ bool Aerospace::GPS_term_complete()
 
   return false;
 }
-void Aerospace::GPS_get_position(long *latitude, long *longitude, unsigned long *fix_age)
+
+void GPS::get_position(long *latitude, long *longitude, unsigned long *fix_age)
 {
   if (latitude) *latitude = _latitude;
   if (longitude) *longitude = _longitude;
-  if (fix_age) *fix_age = _last_position_fix == GPS_INVALID_FIX_TIME ? 
-   GPS_INVALID_AGE : millis() - _last_position_fix;
+  if (fix_age) *fix_age = _last_position_fix == INVALID_FIX_TIME ? 
+   INVALID_AGE : millis() - _last_position_fix;
 }
-void Aerospace::GPS_get_datetime(unsigned long *date, unsigned long *time, unsigned long *age)
+
+void GPS::get_datetime(unsigned long *date, unsigned long *time, unsigned long *age)
 {
   if (date) *date = _date;
   if (time) *time = _time;
-  if (age) *age = _last_time_fix == GPS_INVALID_FIX_TIME ? 
-   GPS_INVALID_AGE : millis() - _last_time_fix;
+  if (age) *age = _last_time_fix == INVALID_FIX_TIME ? 
+   INVALID_AGE : millis() - _last_time_fix;
 }
-float Aerospace::GPS_f_altitude()    
+
+float GPS::f_altitude()    
 {
-  return _altitude == GPS_INVALID_ALTITUDE ? GPS_INVALID_F_ALTITUDE : _altitude / 100.0;
+  return _altitude == INVALID_ALTITUDE ? INVALID_F_ALTITUDE : _altitude / 100.0;
 }
-float Aerospace::GPS_f_speed_kmph()  
+
+float GPS::f_speed_kmph()  
 { 
-  float sk = GPS_f_speed_knots();
-  return sk == GPS_INVALID_F_SPEED ? GPS_INVALID_F_SPEED : _GPS_KMPH_PER_KNOT * sk; 
+  float sk = f_speed_knots();
+  return sk == INVALID_F_SPEED ? INVALID_F_SPEED : _GPS_KMPH_PER_KNOT * sk; 
 }
-float Aerospace::GPS_f_speed_mps()   
+
+float GPS::f_speed_mps()   
 { 
-  float sk = GPS_f_speed_knots();
-  return sk == GPS_INVALID_F_SPEED ? GPS_INVALID_F_SPEED : _GPS_MPS_PER_KNOT * sk; 
+  float sk = f_speed_knots();
+  return sk == INVALID_F_SPEED ? INVALID_F_SPEED : _GPS_MPS_PER_KNOT * sk; 
 }
-void Aerospace::GPS_crack_datetime(int *year, byte *month, byte *day, 
+
+void GPS::crack_datetime(int *year, byte *month, byte *day, 
   byte *hour, byte *minute, byte *second, byte *hundredths, unsigned long *age)
 {
   unsigned long date, time;
-  GPS_get_datetime(&date, &time, age);
+  get_datetime(&date, &time, age);
   if (year) 
   {
     *year = date % 100;
@@ -943,7 +972,8 @@ void Aerospace::GPS_crack_datetime(int *year, byte *month, byte *day,
   if (second) *second = (time / 100) % 100;
   if (hundredths) *hundredths = time % 100;
 }
-int Aerospace::GPS_from_hex(char a) 
+
+int GPS::from_hex(char a) 
 {
   if (a >= 'A' && a <= 'F')
     return a - 'A' + 10;
@@ -952,40 +982,43 @@ int Aerospace::GPS_from_hex(char a)
   else
     return a - '0';
 }
-int Aerospace::GPS_gpsstrcmp(const char *str1, const char *str2)
+
+int GPS::gpsstrcmp(const char *str1, const char *str2)
 {
   while (*str1 && *str1 == *str2)
     ++str1, ++str2;
   return *str1;
 }
-unsigned long Aerospace::GPS_parse_decimal()
+
+unsigned long GPS::parse_decimal()
 {
   char *p = _term;
   bool isneg = *p == '-';
   if (isneg) ++p;
-  unsigned long ret = 100UL * GPS_gpsatol(p);
-  while (GPS_gpsisdigit(*p)) ++p;
+  unsigned long ret = 100UL * gpsatol(p);
+  while (gpsisdigit(*p)) ++p;
   if (*p == '.')
   {
-    if (GPS_gpsisdigit(p[1]))
+    if (gpsisdigit(p[1]))
     {
       ret += 10 * (p[1] - '0');
-      if (GPS_gpsisdigit(p[2]))
+      if (gpsisdigit(p[2]))
         ret += p[2] - '0';
     }
   }
   return isneg ? -ret : ret;
 }
-unsigned long Aerospace::GPS_parse_degrees()
+
+unsigned long GPS::parse_degrees()
 {
   char *p;
-  unsigned long left_of_decimal = GPS_gpsatol(_term);
+  unsigned long left_of_decimal = gpsatol(_term);
   unsigned long hundred1000ths_of_minute = (left_of_decimal % 100UL) * 100000UL;
-  for (p=_term; GPS_gpsisdigit(*p); ++p);
+  for (p=_term; gpsisdigit(*p); ++p);
   if (*p == '.')
   {
     unsigned long mult = 10000;
-    while (GPS_gpsisdigit(*++p))
+    while (gpsisdigit(*++p))
     {
       hundred1000ths_of_minute += mult * (*p - '0');
       mult /= 10;
@@ -993,17 +1026,18 @@ unsigned long Aerospace::GPS_parse_degrees()
   }
   return (left_of_decimal / 100) * 1000000 + (hundred1000ths_of_minute + 3) / 6;
 }
-long Aerospace::GPS_gpsatol(const char *str)
+
+long GPS::gpsatol(const char *str)
 {
   long ret = 0;
-  while (GPS_gpsisdigit(*str))
+  while (gpsisdigit(*str))
     ret = 10 * ret + *str++ - '0';
   return ret;
 }
-float Aerospace::GPS_f_speed_knots() 
+float GPS::f_speed_knots() 
 {
-  return _speed == GPS_INVALID_SPEED ? GPS_INVALID_F_SPEED : _speed / 100.0;
+  return _speed == INVALID_SPEED ? INVALID_F_SPEED : _speed / 100.0;
 }
-const float Aerospace::GPS_INVALID_F_ANGLE = 1000.0;
-const float Aerospace::GPS_INVALID_F_ALTITUDE = 1000000.0;
-const float Aerospace::GPS_INVALID_F_SPEED = -1.0;
+const float GPS::INVALID_F_ANGLE = 1000.0;
+const float GPS::INVALID_F_ALTITUDE = 1000000.0;
+const float GPS::INVALID_F_SPEED = -1.0;
